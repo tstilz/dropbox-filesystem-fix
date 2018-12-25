@@ -36,14 +36,14 @@ except NameError:
 
 
 def is_dropbox_running():
-    pidfile = os.path.expanduser("~/.dropbox/dropbox.pid")
-
+    pidfile = os.path.expanduser("/dbox/.dropbox/dropbox.pid")
     try:
         with open(pidfile, "r") as f:
             pid = int(f.read())
         with open("/proc/%d/cmdline" % pid, "r") as f:
             cmdline = f.read().lower()
-    except:
+    except Exception as e:
+        print(e)
         cmdline = ""
 
     return "dropbox" in cmdline
@@ -57,29 +57,31 @@ def start_dropbox():
         return False
     os.environ["LD_PRELOAD"] = lib_path
 
-    db_path = os.path.expanduser(u"~/.dropbox-dist/dropboxd").encode(
-        sys.getfilesystemencoding()
-    )
+    db_path = os.path.expanduser(u"/opt/dropbox/dropboxd").encode(
+        sys.getfilesystemencoding())
+
     if os.access(db_path, os.X_OK):
-        f = open("/dev/null", "w")
-        # we don't reap the child because we're gonna die anyway, let init do it
+        # process is spawned as user 'dropbox'
         a = subprocess.Popen(
             [db_path],
-            preexec_fn=os.setsid,
-            cwd=os.path.expanduser("~"),
+            cwd=os.path.expanduser("/opt"),
             stderr=sys.stderr,
-            stdout=f,
+            stdout=sys.stdout,
             close_fds=True,
         )
 
+        # minimum start time
+        time.sleep(20)
+
         # in seconds
-        interval = 0.5
-        wait_for = 60
+        interval = 1
+        wait_for = 40
         for i in xrange(int(wait_for / interval)):
             if is_dropbox_running():
                 return True
             # back off from connect for a while
             time.sleep(interval)
+            print("Checking if dropbox is running PID")
 
         return False
     else:
@@ -93,7 +95,10 @@ def main():
 
     if start_dropbox():
         print(">>> Dropbox started successfully")
-        return 0
+
+        # We spawned the dropbox daemon, but if we return docker will die and kill dropbox.
+        while True:
+            pass
 
     print(">>> Dropbox failed to start!")
     return 1
